@@ -1,0 +1,334 @@
+# Swift属性
+- 存储属性
+- 计算属性
+- 延迟存储属性
+- 属性观察者
+- 类型属性
+
+Objective-C中有实例变量和属性的概念,属性的本质就是实例变量、访问和设置实例变量的set方法|get方法.
+而Switft好像没没有实例变量这个概念,统一定义为属性,属性作为类型定义的一部分,包括了其命名,类型和内存管理的特征.
+
+## 存储属性
+一个存储属性就是存储在特定的类或结构体实例里的一个常量或变量,即可以用let声明一个常量存储属性,也可以用var声明一个变量存储属性.
+
+下面我们分别声明一个常量存储属性,一个变量存储属性
+```
+struct Student {
+     let name : String
+     var score: Int
+ }
+ ```
+
+ 
+- 结构体是值类型,用let声明的结构体实例,它的所有属性也就成了常量,即使属性用var声明,也不能进行修改(修改了就相当于修改了结构体实例的内存,与let声明违背)
+- 类是引用类型,把一个引用类型的实例赋值给一个常量后,依然可以修改该实例的可变属性.
+
+ 下面通过代码来查看其中的区别:
+ 值类型
+ ```
+ struct Student {
+     let name : String
+     var score: Int
+ }
+
+
+ let xm = Student(name: "xiaoming", score: 99)
+ //Cannot assign to property: 'xm' is a 'let' constant
+ xm.score = 100
+ ```
+ 
+ 引用类型
+ ```
+ class Student {
+     let name : String
+     var score: Int
+	
+     init(name: String,score: Int) {
+         self.name = name
+         self.score = score
+     }
+ }
+ let xm = Student(name: "xiaoming", score: 99)
+ xm.score = 100
+```
+
+ 关于存储型属性,swift有明确的规定:
+ 在创建类或结构体的实例时,必须为所有的存储属性设置一个合适的初始值
+ - 可以在初始化器里为存储属性设置一个初始值
+ - 可以设置一个默认的属性值作为属性定义的一部分
+
+## 计算属性
+
+类,结构体,枚举都可以定义计算属性,计算属性**不直接存储值**,提供一个**getter**和一个**可选的setter**,来间接获取和设置其他属性或变量的值.
+计算式属性不能对它在声明时直接初始化，而是为它提供一个getter方法用来获取当前计算式属性的值；提供一个setter方法用来设置它的值(其本质是setter和getter方法,并没有对应存储变量的内存)。因此，在定义计算式属性的时候必须显式给出它的类型，并且只能用 var 来声明，不能用 let。
+
+```
+struct Circle {
+    
+    //存储型属性
+    var radius:Double
+    
+    //计算型属性
+    var diameter:Double{
+        
+        //默认参数为newValue
+        set(newDiameter){
+            radius = newDiameter / 2
+        }
+        get{
+            //简化声明
+            //如果整个 getter 是单一表达式,getter 会隐式的返回这个表达式的结果
+//            return radius * 2
+            radius * 2
+        }
+    }
+    
+}
+
+
+var circle = Circle(radius: 10)
+print(circle.radius)
+print(circle.diameter)
+
+print(MemoryLayout<Circle>.stride) // 对象实际分配的内存大小:8
+print(MemoryLayout<Circle>.size) //对象应该分配的内存大小:8
+```
+
+可以发现计算属性并不占用实例对象的内存空间.
+
+### 计算型属性和存储型属性的区别
+存储属性(Stored Property)
+ 1. 类似于成员变量
+ 2. 存储在实例的内存中
+ 3. 结构体,类可以定义存储属性
+ 4. 枚举不可以定义存储属性(枚举的内存只包括关联值和用于标识其自身的内容(一个字节))
+ 
+ 计算型属性(Computed Property)
+ 1. 本质就是方法(函数)(getter,setter)
+ 2. 不占用实例的内存
+ 3. 枚举,结构体,类都可以定义计算型属性
+
+## 延迟存储属性
+
+延迟加载属性是指当第一次被调用的时候,才会计算其初始值得属性
+延迟加载属性必须用var声明,因为属性的初始值可能在实例构造完成之后才会得到(而常量属性在构造完成之前必须要有初始值,因此无法声明成延时加载)
+适用场景:
+1.构建成本昂贵(需要大量复杂的计算,耗费资源(时间/存储空间)),并且在我们需要访问的时候才被创建的资源
+2.依赖于外部因素且这些外部资源只有在构造过程结束之后才会知道的场景
+```
+struct DoList {
+    //声明一个延迟属性
+    lazy var contents :String = {
+        print("call a lazy property! need spend 2s")
+        sleep(2) //模拟耗时操作
+        return "to do homework!"
+    }()
+}
+
+var plan = DoList()
+print(Date())
+for _ in 0..<2 {
+  print(plan.contents)
+}
+//闭包只会调用一次,所以这里耗费2s
+print(Date())
+```
+执行结果:
+
+```
+2019-10-12 08:44:15 +0000
+call a lazy property! need spend 2s
+to do homework!
+to do homework!
+2019-10-12 08:44:17 +0000
+```
+
+如果在延迟存储属性初始化之前,手动为惰性属性赋值,就可以绕过延迟存储属性闭包中的算法逻辑,使属性变得脆弱,解决的办法就是为延迟存储属性增加访问级别控制,通过private（set）关键字，表明属性是可读的，只能由其所有者进行设置。
+
+```
+var new_plan = DoList()
+new_plan.contents = "Let's eat pizza."
+print(new_plan.contents)
+//这里直接为惰性属性赋值,绕过了闭包中的执行逻辑.
+```
+
+解决方法:延迟存储属性增加访问级别控制
+
+```
+struct DoList {
+    //声明一个延迟属性
+    lazy private(set) var contents :String = {
+        print("call a lazy property! need spend 2s")
+        sleep(2) //模拟耗时操作
+        return "to do homework!"
+    }()
+}
+
+var new_plan = DoList()
+new_plan.contents = "Let's eat pizza."
+print(new_plan.contents)
+
+//编译不通过:
+//Cannot assign to property: 'contents' setter is inaccessible
+```
+
+### 值类型延迟属性copy的问题:
+结构体是值类型,实例对象进行赋值,swift会进行写时复制.
+
+Copy发生在延迟存储属性初始化之前
+```
+var do1 = DoList()
+var do2 = do1
+
+print(do1.contents)
+print(do2.contents)
+
+//------执行结果-----
+call a lazy property! need spend 2s
+to do homework!
+call a lazy property! need spend 2s
+to do homework!
+```
+
+Copy发生在延迟存储属性初始化之后
+
+```
+var do1 = DoList()
+print(do1.contents)
+var do2 = do1
+
+print(do1.contents)
+print(do2.contents)
+
+//------执行结果-----
+call a lazy property! need spend 2s
+to do homework!
+to do homework!
+to do homework!
+```
+
+可以发现延迟存储属性如果在copy之前初始化赋值,那么复制得到的实例对象的属性也是初始化过的,如果在copy之前延迟存储属性没有初始化赋值,那么调用该属性时两个实例对象都会分别执行延迟存储属性闭包中的逻辑.也符合我们主观上的预期.
+
+++延迟存储属性是线程不安全的:如果一个被lazy修饰的属性未被初始化时就被多个线程访问,则无法保证该属性只会被初始化一次++
+
+## 属性观察器(存储属性)
+
+属性观察器用于响应和观察属性值的变化,类似于Objective-C的KVO,每次属性被设置值的时候都会调用属性观察器.
+- willSet,在新的值被设置之前调用,其内部默认参数为newValue,也可以自定义该参数的名称
+- didSet,在新的值被修改之后调用,其内部默认参数为oldValue(上次的值).
+
+除了延迟属性之外的其他存储属性都可以添加属性观察器,也可以在子类中通过重写属性的方式为继承的属性(存储属性,计算属性)添加属性观察器.当然计算属性其实没必要添加属性观察器,因为完全可以通过它的setter监控和响应值的变化.
+
+```
+struct Box {
+    
+    var side:Int{
+        willSet{
+            print("Box side willset! \(newValue)")
+        }
+        didSet{
+            print("Box side didset! \(oldValue)")
+            if side < 0 {
+                side = 0
+            }
+        }
+    }
+    init(side:Int) {
+        self.side = side
+    }
+}
+
+
+var box = Box(side: 5)
+box.side = -1
+print(box.side)
+```
+
+执行结果:
+我们可以发现初始化方法中不会触发属性观察器的调用,当对属性进行修改时会执行,在willSet方法中修改当前属性或者默认变量newValue是不允许的,或者是无效的.
+```
+Box side willset! -1
+Box side didset! 5
+0
+```
+
+在 **willSet 方法中不要对被观察的存储式属性进行值修改**，因为最终这些修改操作都是无效的(Attempting to store to property 'side' within its own willSet, which is about to be overwritten by the new value)。
+在**初始化器方法**以及**didSet方法**中对被观察的存储式属性进行修改**不会触发willSet方法**的调用，即不会引发属性观察的消息通知。
+一般来说，在属性观察者中** didSet 方法使用更多些，许多过滤操作**都在此方法中进行。而**willSet方法中则可记录一些数据统计，或对其他一些对象发送某些消息**等。
+
+### 如何让属性观察器在初始化的时候也进行调用?
+**在初始化方法中使用defer语句,进行赋值**
+
+```
+struct Box {
+    //...snip
+
+    init(side:Int) {
+        defer{
+           self.side = side
+        }
+        self.side = side
+    }
+}
+
+var box1 = Box(side: -2)
+print(box1.side)
+
+//---打印结果
+Box side willset! -2
+Box side didset! -2
+0
+```
+
+## 类型属性
+
+实例属性的特点是当前枚举、结构体、类等类型的对象实例各自持有各自的实例属性，并相互独立,它们占据着对象实例自身的存储空间。而类型属性（Type Properties），是**属于类型自己**的，与该类型所创建的对象实例无关。
+类型属性用于定于某个类型**所有实例共享的数据**,类似于C语言中的静态变量.
+
+**枚举、结构体以及类类型都能定义属于自己的类型属性**，而且声明方法非常简单，只需要在属性声明最前面添加** static** 关键字即可。类型属性与实例属性一样，也具有**存储式类型属性**、**计算式类型属性**以及**针对存储式类型属性的属性观察者**。(static修饰的属性子类不可以重写).
+类型属性**本身具有延迟加载**特性,只有在第一次被访问的时候才会初始化，所以**不能用 lazy **去修饰它们,但不同于实例的延迟属性,它是线程安全的,**被多个线程同时访问,系统也保证只会对其进行一次初始化**,通过汇编查看其实通过**libswiftCore.dylib 中swift_once:**来保证只初始化一次的。
+
+同样的存储型实例属性可以声明为常量或变量,而计算型实例属性跟实例的计算型属性一样只能定义成变量属性.
+
+**存储型实例属性必须指定默认值**,因为类型本身没有构造器,无法再初始化过程中使用构造器给类型属性赋值.
+
+对于计算式类型属性，如果定义在一个**类**类型中，那么还可以使用** class **关键字去声明，表示**允许其子类覆盖**当前类的实现。
+访问类型属性是通过**类型.成员访问操作符**来进行访问和设置.
+
+```
+class Student {
+    //static 存储属性 ,class只能修饰计算属性,staic修饰的属性子类不可以重写
+    static var num:Int = 0
+    //static 计算属性 当前为class,这里也可以用class修饰,表示子类可以重写这个属性
+    static var descriptions:String{
+        return "Class_Student"
+    }
+    //static 属性观察者
+    static var level:Int = 0 {
+        willSet{
+            print("level willSet with \(newValue)")
+        }
+        didSet{
+            print("level didSet with \(level), the last value is \(oldValue)")
+        }
+    }
+    init() {
+        Student.num += 1
+    }
+}
+
+var s = Student()
+//通过类型.(成员操作符)变量名访问
+print(Student.num)
+print(Student.descriptions)
+//这里演示触发属性观察器操作
+Student.level = 1
+```
+
+执行结果:
+```
+1
+Class_Student
+level willSet with 1
+level didSet with 1, the last value is 0
+```
